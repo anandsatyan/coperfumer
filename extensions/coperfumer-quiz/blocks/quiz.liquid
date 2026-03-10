@@ -1,0 +1,629 @@
+{% comment %} Coperfumer Quiz Widget Block {% endcomment %}
+
+<div id="coperfumer-quiz-root"></div>
+
+<style>
+  /* Floating Button */
+  #cpf-float-btn {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 9998;
+    background: {{ block.settings.button_color }};
+    color: {{ block.settings.button_text_color }};
+    padding: 14px 22px;
+    border-radius: 50px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.18);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    font-family: {{ block.settings.font_family }};
+  }
+  #cpf-float-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 24px rgba(0,0,0,0.22);
+  }
+
+  /* Overlay */
+  #cpf-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 9999;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  #cpf-overlay.active {
+    display: flex;
+  }
+
+  /* Popup Card */
+  #cpf-popup {
+    background: #fff;
+    border-radius: 16px;
+    width: 100%;
+    max-width: 520px;
+    max-height: 85vh;
+    overflow-y: auto;
+    padding: 32px;
+    position: relative;
+    font-family: {{ block.settings.font_family }};
+    box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+  }
+
+  /* Mobile full screen */
+  @media (max-width: 600px) {
+    #cpf-overlay {
+      padding: 0;
+      align-items: flex-end;
+    }
+    #cpf-popup {
+      border-radius: 20px 20px 0 0;
+      max-height: 92vh;
+      padding: 24px 20px;
+    }
+  }
+
+  /* Close button */
+  #cpf-close {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    background: none;
+    border: none;
+    font-size: 22px;
+    cursor: pointer;
+    color: #888;
+    line-height: 1;
+  }
+
+  /* Progress bar */
+  #cpf-progress-wrap {
+    margin-bottom: 24px;
+  }
+  #cpf-progress-label {
+    font-size: 12px;
+    color: #999;
+    margin-bottom: 6px;
+  }
+  #cpf-progress-bar-bg {
+    background: #eee;
+    border-radius: 10px;
+    height: 5px;
+    width: 100%;
+  }
+  #cpf-progress-bar-fill {
+    background: {{ block.settings.button_color }};
+    height: 5px;
+    border-radius: 10px;
+    transition: width 0.3s ease;
+  }
+
+  /* Question */
+  #cpf-question-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: #1a1a1a;
+    margin-bottom: 20px;
+    line-height: 1.3;
+  }
+
+  /* Answer tiles */
+  .cpf-options {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  .cpf-option {
+    border: 2px solid #e8e8e8;
+    border-radius: 10px;
+    padding: 14px 12px;
+    text-align: center;
+    cursor: pointer;
+    font-size: 14px;
+    color: #333;
+    transition: all 0.15s ease;
+    background: #fff;
+  }
+  .cpf-option:hover {
+    border-color: {{ block.settings.button_color }};
+    background: #fafafa;
+  }
+  .cpf-option.selected {
+    border-color: {{ block.settings.button_color }};
+    background: {{ block.settings.button_color }}15;
+    color: #1a1a1a;
+    font-weight: 600;
+  }
+
+  /* Email screen */
+  #cpf-email-screen { display: none; }
+  #cpf-email-screen.active { display: block; }
+  #cpf-email-title {
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+  #cpf-email-subtitle {
+    font-size: 14px;
+    color: #666;
+    margin-bottom: 20px;
+  }
+  #cpf-email-input {
+    width: 100%;
+    padding: 12px 16px;
+    border: 2px solid #e8e8e8;
+    border-radius: 10px;
+    font-size: 15px;
+    margin-bottom: 12px;
+    box-sizing: border-box;
+    font-family: {{ block.settings.font_family }};
+  }
+  #cpf-email-input:focus {
+    outline: none;
+    border-color: {{ block.settings.button_color }};
+  }
+  #cpf-email-submit {
+    width: 100%;
+    padding: 14px;
+    background: {{ block.settings.button_color }};
+    color: {{ block.settings.button_text_color }};
+    border: none;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: {{ block.settings.font_family }};
+  }
+  #cpf-email-skip {
+    display: block;
+    text-align: center;
+    margin-top: 12px;
+    font-size: 13px;
+    color: #999;
+    cursor: pointer;
+    text-decoration: underline;
+  }
+
+  /* Results screen */
+  #cpf-results-screen { display: none; }
+  #cpf-results-screen.active { display: block; }
+  #cpf-results-title {
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+  #cpf-results-subtitle {
+    font-size: 14px;
+    color: #666;
+    margin-bottom: 20px;
+  }
+  .cpf-product-card {
+    display: flex;
+    gap: 14px;
+    border: 1px solid #eee;
+    border-radius: 12px;
+    padding: 14px;
+    margin-bottom: 12px;
+    align-items: center;
+  }
+  .cpf-product-card img {
+    width: 70px;
+    height: 70px;
+    object-fit: cover;
+    border-radius: 8px;
+    flex-shrink: 0;
+  }
+  .cpf-product-info { flex: 1; }
+  .cpf-product-name {
+    font-weight: 600;
+    font-size: 15px;
+    margin-bottom: 4px;
+  }
+  .cpf-match-reason {
+    font-size: 12px;
+    color: #777;
+    margin-bottom: 8px;
+    font-style: italic;
+  }
+  .cpf-product-price {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1a1a1a;
+    margin-bottom: 8px;
+  }
+  .cpf-add-to-cart {
+    background: {{ block.settings.button_color }};
+    color: {{ block.settings.button_text_color }};
+    border: none;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: {{ block.settings.font_family }};
+  }
+  #cpf-see-all {
+    display: block;
+    text-align: center;
+    margin-top: 16px;
+    font-size: 14px;
+    color: {{ block.settings.button_color }};
+    font-weight: 600;
+    text-decoration: none;
+  }
+  #cpf-retake {
+    display: block;
+    text-align: center;
+    margin-top: 12px;
+    font-size: 13px;
+    color: #999;
+    cursor: pointer;
+    text-decoration: underline;
+  }
+
+  /* Loading */
+  #cpf-loading { display: none; text-align: center; padding: 40px 0; }
+  #cpf-loading.active { display: block; }
+  .cpf-spinner {
+    width: 36px;
+    height: 36px;
+    border: 3px solid #eee;
+    border-top-color: {{ block.settings.button_color }};
+    border-radius: 50%;
+    animation: cpf-spin 0.8s linear infinite;
+    margin: 0 auto 16px;
+  }
+  @keyframes cpf-spin { to { transform: rotate(360deg); } }
+
+  /* Powered by */
+  #cpf-powered {
+    text-align: center;
+    margin-top: 20px;
+    font-size: 11px;
+    color: #ccc;
+  }
+  #cpf-powered a { color: #ccc; text-decoration: none; }
+</style>
+
+{% if block.settings.hide_after_completion %}
+<script>
+  window.cpfHideAfterCompletion = true;
+</script>
+{% endif %}
+
+<button id="cpf-float-btn">{{ block.settings.button_text }}</button>
+
+<div id="cpf-overlay">
+  <div id="cpf-popup">
+    <button id="cpf-close">✕</button>
+
+    <!-- Quiz screen -->
+    <div id="cpf-quiz-screen">
+      <div id="cpf-progress-wrap">
+        <div id="cpf-progress-label">Question 1 of 5</div>
+        <div id="cpf-progress-bar-bg">
+          <div id="cpf-progress-bar-fill" style="width: 20%"></div>
+        </div>
+      </div>
+      <div id="cpf-question-title"></div>
+      <div class="cpf-options" id="cpf-options-wrap"></div>
+    </div>
+
+    <!-- Email screen -->
+    <div id="cpf-email-screen">
+      <div id="cpf-email-title">Almost there! 🌸</div>
+      <div id="cpf-email-subtitle">Enter your email to see your perfect scent matches.</div>
+      <input type="email" id="cpf-email-input" placeholder="your@email.com" />
+      <button id="cpf-email-submit">Show My Matches</button>
+      <span id="cpf-email-skip">Skip for now</span>
+    </div>
+
+    <!-- Loading screen -->
+    <div id="cpf-loading">
+      <div class="cpf-spinner"></div>
+      <div style="color:#666; font-size:14px;">Finding your perfect scents...</div>
+    </div>
+
+    <!-- Results screen -->
+    <div id="cpf-results-screen">
+      <div id="cpf-results-title">Your Scent Matches ✨</div>
+      <div id="cpf-results-subtitle">Based on your preferences, we think you'll love these.</div>
+      <div id="cpf-products-wrap"></div>
+      <a href="/collections/all" id="cpf-see-all">See all matches →</a>
+      <span id="cpf-retake">Retake quiz</span>
+    </div>
+
+    {% if block.settings.show_branding %}
+    <div id="cpf-powered">Powered by <a href="https://coperfumer.com" target="_blank">Coperfumer</a></div>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+  const CPF_QUESTIONS = [
+    {
+      question: "{{ block.settings.q1_text | replace: "'", "'" }}",
+      options: [
+        { label: "Romantic & Sensual", value: "romantic, sensual, intimate" },
+        { label: "Fresh & Energetic", value: "fresh, energetic, vibrant, citrus" },
+        { label: "Mysterious & Dark", value: "mysterious, dark, smoky, deep" },
+        { label: "Calm & Peaceful", value: "calm, peaceful, soft, gentle" }
+      ]
+    },
+    {
+      question: "{{ block.settings.q2_text | replace: "'", "'" }}",
+      options: [
+        { label: "Daily / Office", value: "light, everyday, professional, subtle" },
+        { label: "Evenings & Date Nights", value: "evening, seductive, bold, night" },
+        { label: "Special Occasions", value: "luxurious, special, memorable, rich" },
+        { label: "Whenever I feel like it", value: "versatile, casual, flexible" }
+      ]
+    },
+    {
+      question: "{{ block.settings.q3_text | replace: "'", "'" }}",
+      options: [
+        { label: "Florals", value: "floral, rose, jasmine, peony, bloom" },
+        { label: "Orientals", value: "oriental, oud, amber, musk, resin" },
+        { label: "Fresh & Citrus", value: "fresh, citrus, aquatic, green, clean" },
+        { label: "Woody & Earthy", value: "woody, sandalwood, cedar, vetiver, earthy" }
+      ]
+    },
+    {
+      question: "{{ block.settings.q4_text | replace: "'", "'" }}",
+      options: [
+        { label: "Light & Subtle", value: "light, airy, subtle, delicate" },
+        { label: "Moderate", value: "moderate, balanced, wearable" },
+        { label: "Bold & Powerful", value: "bold, powerful, intense, strong" },
+        { label: "Depends on mood", value: "versatile, adaptable" }
+      ]
+    },
+    {
+      question: "{{ block.settings.q5_text | replace: "'", "'" }}",
+      options: [
+        { label: "Luxurious & Sophisticated", value: "luxury, sophisticated, elegant, premium" },
+        { label: "Approachable & Warm", value: "warm, approachable, friendly, cozy" },
+        { label: "Edgy & Unique", value: "edgy, unique, artistic, avant-garde" },
+        { label: "Pure & Natural", value: "natural, pure, clean, organic" }
+      ]
+    }
+  ];
+
+  let currentQ = 0;
+  let answers = [];
+
+  const floatBtn = document.getElementById('cpf-float-btn');
+  const overlay = document.getElementById('cpf-overlay');
+  const closeBtn = document.getElementById('cpf-close');
+  const quizScreen = document.getElementById('cpf-quiz-screen');
+  const emailScreen = document.getElementById('cpf-email-screen');
+  const loadingScreen = document.getElementById('cpf-loading');
+  const resultsScreen = document.getElementById('cpf-results-screen');
+  const progressLabel = document.getElementById('cpf-progress-label');
+  const progressFill = document.getElementById('cpf-progress-bar-fill');
+  const questionTitle = document.getElementById('cpf-question-title');
+  const optionsWrap = document.getElementById('cpf-options-wrap');
+
+  function openQuiz() {
+    overlay.classList.add('active');
+    renderQuestion(0);
+  }
+
+  function closeQuiz() {
+    overlay.classList.remove('active');
+  }
+
+  function renderQuestion(index) {
+    currentQ = index;
+    const q = CPF_QUESTIONS[index];
+    progressLabel.textContent = `Question ${index + 1} of ${CPF_QUESTIONS.length}`;
+    progressFill.style.width = `${((index + 1) / CPF_QUESTIONS.length) * 100}%`;
+    questionTitle.textContent = q.question;
+    optionsWrap.innerHTML = '';
+    q.options.forEach((opt, i) => {
+      const tile = document.createElement('div');
+      tile.className = 'cpf-option';
+      tile.textContent = opt.label;
+      tile.addEventListener('click', () => selectOption(opt.value, index));
+      optionsWrap.appendChild(tile);
+    });
+    quizScreen.style.display = 'block';
+    emailScreen.classList.remove('active');
+    loadingScreen.classList.remove('active');
+    resultsScreen.classList.remove('active');
+  }
+
+  function selectOption(value, index) {
+    answers[index] = value;
+    setTimeout(() => {
+      if (index + 1 < CPF_QUESTIONS.length) {
+        renderQuestion(index + 1);
+      } else {
+        showEmailScreen();
+      }
+    }, 200);
+  }
+
+  function showEmailScreen() {
+    quizScreen.style.display = 'none';
+    emailScreen.classList.add('active');
+  }
+
+  async function fetchMatches(email) {
+    emailScreen.classList.remove('active');
+    loadingScreen.classList.add('active');
+
+    const scentProfile = answers.join(', ');
+
+    try {
+        const tunnelUrl = 'https://periodic-unnecessary-category-techno.trycloudflare.com';
+        const res = await fetch(tunnelUrl + '/app/quiz-match', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scentProfile,
+          email,
+          shop: window.Shopify?.shop || ''
+        })
+      });
+      const data = await res.json();
+      loadingScreen.classList.remove('active');
+      showResults(data.matches);
+
+      if (window.cpfHideAfterCompletion) {
+        document.getElementById('cpf-float-btn').style.display = 'none';
+      }
+    } catch(e) {
+      loadingScreen.classList.remove('active');
+      showResults([]);
+    }
+  }
+
+  function showResults(matches) {
+    resultsScreen.classList.add('active');
+    const wrap = document.getElementById('cpf-products-wrap');
+    wrap.innerHTML = '';
+
+    if (!matches || matches.length === 0) {
+      wrap.innerHTML = '<p style="color:#666;text-align:center;">No matches found. Try browsing our collection!</p>';
+      return;
+    }
+
+    matches.forEach(product => {
+      const card = document.createElement('div');
+      card.className = 'cpf-product-card';
+      card.innerHTML = `
+        <img src="${product.image}" alt="${product.title}" />
+        <div class="cpf-product-info">
+          <div class="cpf-product-name">${product.title}</div>
+          <div class="cpf-match-reason">${product.reason}</div>
+          <div class="cpf-product-price">${product.price}</div>
+          <button class="cpf-add-to-cart" data-variant="${product.variantId}">Add to Cart</button>
+        </div>
+      `;
+      wrap.appendChild(card);
+    });
+
+    document.querySelectorAll('.cpf-add-to-cart').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const variantId = btn.getAttribute('data-variant');
+        await fetch('/cart/add.js', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: variantId, quantity: 1 })
+        });
+        btn.textContent = 'Added ✓';
+        btn.style.opacity = '0.7';
+      });
+    });
+  }
+
+  // Event listeners
+  floatBtn.addEventListener('click', openQuiz);
+  closeBtn.addEventListener('click', closeQuiz);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) closeQuiz(); });
+
+  document.getElementById('cpf-email-submit').addEventListener('click', () => {
+    const email = document.getElementById('cpf-email-input').value;
+    fetchMatches(email);
+  });
+
+  document.getElementById('cpf-email-skip').addEventListener('click', () => {
+    fetchMatches('');
+  });
+
+  document.getElementById('cpf-retake').addEventListener('click', () => {
+    answers = [];
+    renderQuestion(0);
+  });
+</script>
+
+{% schema %}
+{
+  "name": "Coperfumer Quiz",
+  "target": "body",
+  "settings": [
+    {
+      "type": "text",
+      "id": "button_text",
+      "label": "Floating Button Text",
+      "default": "✨ Find Your Scent"
+    },
+    {
+      "type": "color",
+      "id": "button_color",
+      "label": "Button Color",
+      "default": "#1a1a1a"
+    },
+    {
+      "type": "color",
+      "id": "button_text_color",
+      "label": "Button Text Color",
+      "default": "#ffffff"
+    },
+    {
+      "type": "select",
+      "id": "font_family",
+      "label": "Font",
+      "default": "inherit",
+      "options": [
+        { "value": "inherit", "label": "Match store font" },
+        { "value": "Georgia, serif", "label": "Georgia (Serif)" },
+        { "value": "'Helvetica Neue', sans-serif", "label": "Helvetica (Modern)" },
+        { "value": "Garamond, serif", "label": "Garamond (Elegant)" }
+      ]
+    },
+    {
+      "type": "checkbox",
+      "id": "show_branding",
+      "label": "Show 'Powered by Coperfumer' (free plan)",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "hide_after_completion",
+      "label": "Hide button after customer completes quiz",
+      "default": false
+    },
+    {
+      "type": "header",
+      "content": "Quiz Questions"
+    },
+    {
+      "type": "text",
+      "id": "q1_text",
+      "label": "Question 1",
+      "default": "What's your mood today?"
+    },
+    {
+      "type": "text",
+      "id": "q2_text",
+      "label": "Question 2",
+      "default": "When do you wear perfume most?"
+    },
+    {
+      "type": "text",
+      "id": "q3_text",
+      "label": "Question 3",
+      "default": "Which scent family do you love?"
+    },
+    {
+      "type": "text",
+      "id": "q4_text",
+      "label": "Question 4",
+      "default": "How intense do you like your scent?"
+    },
+    {
+      "type": "text",
+      "id": "q5_text",
+      "label": "Question 5",
+      "default": "What feeling should your perfume give others?"
+    }
+  ]
+}
+{% endschema %}
