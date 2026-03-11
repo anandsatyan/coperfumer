@@ -461,10 +461,7 @@
     const scentProfile = answers.join(', ');
 
     try {
-        const tunnelUrl = 'https://periodic-unnecessary-category-techno.trycloudflare.com';
-        const res = await fetch(tunnelUrl + '/app/quiz-match', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+const res = await fetch('/apps/coperfumer/quiz-match?v=2', {        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           scentProfile,
           email,

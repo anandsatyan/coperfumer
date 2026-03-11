@@ -26,7 +26,7 @@ optional_scopes = [ ]
 use_legacy_install_flow = false
 
 [auth]
-redirect_urls = [ ]
+redirect_urls = [ "https://coperfumer-ogs3e.ondigitalocean.app/auth/callback" ]
 
 [product.metafields.app.demo_info]
 type = "single_line_text_field"
