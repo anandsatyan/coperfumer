@@ -1,4 +1,18 @@
+import { redirect } from "react-router";
+import { authenticate } from "../../shopify.server";
 import { useEffect, useRef, useState } from "react";
+
+export async function loader({ request }) {
+  try {
+    await authenticate.admin(request);
+    // If authenticated, redirect to app dashboard
+    return redirect("/app");
+  } catch {
+    // Not authenticated, show landing page
+    return null;
+  }
+}
+
 
 export default function LandingPage() {
   const [scrolled, setScrolled] = useState(false);
