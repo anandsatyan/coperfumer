@@ -1,16 +1,39 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { authenticate } from "../shopify.server";
 
-const client = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
+const JSON_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Content-Type": "application/json",
+};
+
+function jsonResponse(data, status = 200) {
+  return Response.json(data, { status, headers: { ...JSON_HEADERS } });
+}
 
 export async function action({ request }) {
   try {
-    const body = await request.json();
-    const { scentProfile } = body;
+    if (!process.env.ANTHROPIC_API_KEY?.trim()) {
+      console.error("Quiz match: ANTHROPIC_API_KEY is not set");
+      return jsonResponse(
+        { matches: [], error: "Server misconfiguration: Claude API key not set. Please contact the store owner." },
+        500
+      );
+    }
 
-    console.log("Quiz match called with profile:", scentProfile);
+    let body;
+    try {
+      body = await request.json();
+    } catch (parseError) {
+      console.error("Quiz match: invalid request body", parseError);
+      return jsonResponse(
+        { matches: [], error: "Invalid request. Please try again." },
+        400
+      );
+    }
+    const { scentProfile } = body || {};
+    const profileText = typeof scentProfile === "string" ? scentProfile : (scentProfile ? String(scentProfile) : "");
+
+    console.log("Quiz match called with profile:", profileText || "(empty)");
 
     let products = [];
 
@@ -41,39 +64,23 @@ export async function action({ request }) {
       const data = await productsResponse.json();
       console.log("Products fetched:", JSON.stringify(data).slice(0, 200));
 
-      products = data.data.products.edges.map(({ node }) => ({
+      products = (data.data?.products?.edges ?? []).map(({ node }) => ({
         title: node.title,
         description: node.descriptionHtml?.replace(/<[^>]*>/g, "").slice(0, 300) || "",
-        price: `$${parseFloat(node.priceRangeV2.minVariantPrice.amount).toFixed(2)}`,
+        price: `$${parseFloat(node.priceRangeV2?.minVariantPrice?.amount ?? 0).toFixed(2)}`,
         image: node.featuredImage?.url || "",
-        variantId: node.variants.edges[0]?.node.id.split("/").pop() || "",
+        variantId: node.variants?.edges?.[0]?.node?.id?.split("/").pop() || "",
       }));
 
       console.log("Product count:", products.length);
     } catch (authError) {
       console.error("Auth/products error:", authError.message);
-      return Response.json(
-        { matches: [], error: "Auth failed: " + authError.message },
-        {
-          headers: {
-            "Access-Control-Allow-Origin": "*",
-            "Content-Type": "application/json",
-          },
-        }
-      );
+      return jsonResponse({ matches: [], error: "Auth failed: " + authError.message }, 403);
     }
 
     if (products.length === 0) {
       console.log("No products found");
-      return Response.json(
-        { matches: [], error: "No products found" },
-        {
-          headers: {
-            "Access-Control-Allow-Origin": "*",
-            "Content-Type": "application/json",
-          },
-        }
-      );
+      return jsonResponse({ matches: [], error: "No products found" });
     }
 
     const productList = products
@@ -82,42 +89,89 @@ export async function action({ request }) {
 
     console.log("Calling Claude with", products.length, "products");
 
-    const message = await client.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 1000,
-      messages: [
-        {
-          role: "user",
-          content: `You are a perfume expert helping match customers to fragrances.
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-Customer scent profile: ${scentProfile}
+    let message;
+    try {
+      message = await client.messages.create({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 1000,
+        messages: [
+          {
+            role: "user",
+            content: `You are a perfume expert helping match customers to fragrances.
+
+Customer scent profile: ${profileText || "Not provided"}
 
 Available perfumes:
 ${productList}
 
-Return ONLY a valid JSON array of top 3 matches, no markdown, no explanation:
+Return ONLY a valid JSON array of exactly 3 matches, no markdown, no explanation. Use 1-based index into the list above. Format:
 [{"index":1,"reason":"reason here"},{"index":2,"reason":"reason here"},{"index":3,"reason":"reason here"}]
 
 Keep reasons under 15 words, poetic and personal.`,
-        },
-      ],
-    });
+          },
+        ],
+      });
+    } catch (apiError) {
+      const msg = apiError?.message ?? String(apiError);
+      console.error("Claude API error:", msg);
+      const userMsg =
+        msg.includes("api_key") || msg.includes("API key") || msg.includes("401")
+          ? "Server misconfiguration: invalid Claude API key. Please contact the store owner."
+          : msg.includes("429") || msg.includes("rate")
+            ? "Too many requests. Please try again in a moment."
+            : "Matching is temporarily unavailable. Please try again.";
+      return jsonResponse({ matches: [], error: userMsg }, 500);
+    }
 
-    const responseText = message.content[0].text.trim();
-    console.log("Claude response:", responseText);
+    const content = message?.content;
+    if (!Array.isArray(content) || content.length === 0) {
+      console.error("Claude response: empty content", content);
+      return jsonResponse({ matches: [], error: "No response from matching service. Please try again." }, 500);
+    }
+
+    const textBlock = content.find((b) => b.type === "text" && b.text);
+    const responseText = textBlock?.text?.trim() ?? "";
+    if (!responseText) {
+      console.error("Claude response: no text block", content.map((b) => b.type));
+      return jsonResponse({ matches: [], error: "Invalid response from matching service. Please try again." }, 500);
+    }
+
+    console.log("Claude response:", responseText.slice(0, 200));
+
     const clean = responseText.replace(/```json|```/g, "").trim();
-    const matches = JSON.parse(clean);
+    let matches;
+    try {
+      const arrayMatch = clean.match(/\[[\s\S]*\]/);
+      const jsonStr = arrayMatch ? arrayMatch[0] : clean;
+      matches = JSON.parse(jsonStr);
+    } catch (parseErr) {
+      console.error("Claude response parse error:", parseErr.message, "raw:", responseText.slice(0, 300));
+      return jsonResponse(
+        { matches: [], error: "Could not read match results. Please try again." },
+        500
+      );
+    }
 
-    const result = matches.map((match) => {
-      const product = products[match.index - 1];
-      return {
-        title: product.title,
-        price: product.price,
-        image: product.image,
-        variantId: String(product.variantId),
-        reason: match.reason,
-      };
-    });
+    if (!Array.isArray(matches)) {
+      console.error("Claude response: not an array", typeof matches);
+      return jsonResponse({ matches: [], error: "Invalid match format. Please try again." }, 500);
+    }
+
+    const result = matches
+      .filter((m) => m && Number.isInteger(m.index) && m.index >= 1 && m.index <= products.length && m.reason)
+      .slice(0, 3)
+      .map((match) => {
+        const product = products[match.index - 1];
+        return {
+          title: product.title,
+          price: product.price,
+          image: product.image,
+          variantId: String(product.variantId),
+          reason: String(match.reason).slice(0, 200),
+        };
+      });
 
     console.log("Returning matches:", result.length);
 
@@ -125,24 +179,17 @@ Keep reasons under 15 words, poetic and personal.`,
       { matches: result },
       {
         headers: {
-          "Access-Control-Allow-Origin": "*",
+          ...JSON_HEADERS,
           "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
           "Access-Control-Allow-Headers": "Content-Type",
-          "Content-Type": "application/json",
         },
       }
     );
   } catch (error) {
-    console.error("Quiz match error:", error.message);
-    return Response.json(
-      { matches: [], error: error.message },
-      {
-        status: 500,
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Content-Type": "application/json",
-        },
-      }
+    console.error("Quiz match error:", error?.message ?? error);
+    return jsonResponse(
+      { matches: [], error: error?.message ?? "Something went wrong. Please try again." },
+      500
     );
   }
 }

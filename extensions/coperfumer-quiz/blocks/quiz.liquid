@@ -409,6 +409,13 @@
   const questionTitle = document.getElementById('cpf-question-title');
   const optionsWrap = document.getElementById('cpf-options-wrap');
 
+  function escapeHtml(s) {
+    if (typeof s !== 'string') return '';
+    const div = document.createElement('div');
+    div.textContent = s;
+    return div.innerHTML;
+  }
+
   function openQuiz() {
     overlay.classList.add('active');
     renderQuestion(0);
@@ -461,7 +468,9 @@
     const scentProfile = answers.join(', ');
 
     try {
-const res = await fetch('/apps/coperfumer/quiz-match?v=2', {        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch('/apps/coperfumer/quiz-match?v=2', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           scentProfile,
           email,
@@ -470,22 +479,25 @@ const res = await fetch('/apps/coperfumer/quiz-match?v=2', {        headers: { '
       });
       const data = await res.json();
       loadingScreen.classList.remove('active');
-      showResults(data.matches);
-
+      showResults(data.matches || [], data.error);
       if (window.cpfHideAfterCompletion) {
         document.getElementById('cpf-float-btn').style.display = 'none';
       }
-    } catch(e) {
+    } catch (e) {
       loadingScreen.classList.remove('active');
-      showResults([]);
+      showResults([], 'Connection error. Please check your internet and try again.');
     }
   }
 
-  function showResults(matches) {
+  function showResults(matches, errorMessage) {
     resultsScreen.classList.add('active');
     const wrap = document.getElementById('cpf-products-wrap');
     wrap.innerHTML = '';
 
+    if (errorMessage) {
+      wrap.innerHTML = '<p style="color:#c00;text-align:center;max-width:320px;margin:0 auto;">' + escapeHtml(errorMessage) + '</p>';
+      return;
+    }
     if (!matches || matches.length === 0) {
       wrap.innerHTML = '<p style="color:#666;text-align:center;">No matches found. Try browsing our collection!</p>';
       return;
