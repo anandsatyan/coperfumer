@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
-import { authenticate } from "../shopify.server";
+import { authenticate, unauthenticated } from "../shopify.server";
 
 const JSON_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -92,7 +92,7 @@ export async function action({ request }) {
     try {
       if (proxyContext?.admin) {
         console.log("App proxy authenticated with session, using Admin API");
-        const productsResponse = await admin.graphql(`
+        const productsResponse = await proxyContext.admin.graphql(`
           query {
             products(first: 50) {
               edges {
@@ -120,31 +120,36 @@ export async function action({ request }) {
           variantId: node.variants?.edges?.[0]?.node?.id?.split("/").pop() || "",
         }));
       } else if (shopDomain) {
-        console.log("App proxy validated, no session – fetching products from storefront:", shopDomain);
-        const normalizedShop = shopDomain.includes(".") ? shopDomain : `${shopDomain}.myshopify.com`;
-        const productsRes = await fetch(`https://${normalizedShop}/products.json?limit=50`);
-        const contentType = productsRes.headers.get("content-type") || "";
-
-        if (!contentType.includes("application/json")) {
-          const preview = (await productsRes.text()).slice(0, 200);
-          console.error("Storefront products.json did not return JSON. Content-Type:", contentType, "Preview:", preview);
-          return jsonResponse(
-            {
-              matches: [],
-              error:
-                "Storefront is locked or not publicly accessible. Disable the storefront password or open the app from Shopify admin so it can use the Admin API.",
-            },
-            200
-          );
-        }
-
-        const productsData = await productsRes.json();
-        products = (productsData.products ?? []).map((p) => ({
-          title: p.title,
-          description: p.body_html?.replace(/<[^>]*>/g, "").slice(0, 300) || "",
-          price: `$${parseFloat(p.variants?.[0]?.price ?? 0).toFixed(2)}`,
-          image: p.images?.[0]?.src ?? "",
-          variantId: String(p.variants?.[0]?.id ?? ""),
+        // Password-protected stores cannot be fetched via /products.json.
+        // Instead, use the app's offline session via unauthenticated.admin(shop).
+        console.log("No app-proxy session; using unauthenticated Admin API for:", shopDomain);
+        const { admin } = await unauthenticated.admin(shopDomain);
+        const productsResponse = await admin.graphql(`
+          query {
+            products(first: 50) {
+              edges {
+                node {
+                  title
+                  descriptionHtml
+                  priceRangeV2 {
+                    minVariantPrice { amount currencyCode }
+                  }
+                  featuredImage { url }
+                  variants(first: 1) {
+                    edges { node { id } }
+                  }
+                }
+              }
+            }
+          }
+        `);
+        const data = await productsResponse.json();
+        products = (data.data?.products?.edges ?? []).map(({ node }) => ({
+          title: node.title,
+          description: node.descriptionHtml?.replace(/<[^>]*>/g, "").slice(0, 300) || "",
+          price: `$${parseFloat(node.priceRangeV2?.minVariantPrice?.amount ?? 0).toFixed(2)}`,
+          image: node.featuredImage?.url || "",
+          variantId: node.variants?.edges?.[0]?.node?.id?.split("/").pop() || "",
         }));
       } else {
         console.error("App proxy: no admin and no shop in request");
