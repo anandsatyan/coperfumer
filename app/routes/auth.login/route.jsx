@@ -46,16 +46,24 @@ export const action = async ({ request }) => {
   return { errors, apiKey: API_KEY || "", shop: shopFromForm };
 };
 
+function buildInstallUrl(shop, apiKey) {
+  if (!shop?.trim() || !apiKey) return null;
+  const host = shop.replace(/^https?:\/\//, "").replace(/\/$/, "").trim();
+  const domain = host.includes(".") ? host : `${host}.myshopify.com`;
+  return `https://${domain}/admin/oauth/install?client_id=${apiKey}`;
+}
+
 export default function Auth() {
   const loaderData = useLoaderData();
   const actionData = useActionData();
   const { errors, apiKey, shop: shopFromUrl } = actionData || loaderData;
   const [shop, setShop] = useState(shopFromUrl || "");
 
+  const installUrl = buildInstallUrl(shop, apiKey);
+
   return (
     <AppProvider embedded apiKey={apiKey}>
       <s-page>
-        {/* Native form so submit does a full page POST; browser then follows 302 to Shopify. */}
         <form method="post" action="/auth/login">
           <s-section heading="Log in">
             <label htmlFor="shop-domain">Shop domain</label>
@@ -71,6 +79,13 @@ export default function Auth() {
             />
             {errors?.shop && <p style={{ color: "#c00", marginTop: 0 }}>{errors.shop}</p>}
             <button type="submit">Log in</button>
+            {installUrl && (
+              <p style={{ marginTop: "1rem" }}>
+                <a href={installUrl} target="_blank" rel="noreferrer noopener" style={{ fontSize: "0.9rem" }}>
+                  Or open install page in new tab →
+                </a>
+              </p>
+            )}
           </s-section>
         </form>
       </s-page>
