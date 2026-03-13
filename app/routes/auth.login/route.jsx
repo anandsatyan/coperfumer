@@ -29,15 +29,21 @@ export const loader = async ({ request }) => {
 
 export const action = async ({ request }) => {
   const formData = await request.formData();
-  const shopFromForm = formData.get("shop");
+  const shopRaw = formData.get("shop");
+  const shopFromForm = typeof shopRaw === "string" ? shopRaw.trim() : "";
   if (shopFromForm) {
-    const installUrl = buildInstallRedirect(String(shopFromForm));
-    if (installUrl) throw redirect(installUrl);
+    const installUrl = buildInstallRedirect(shopFromForm);
+    if (installUrl) {
+      // Return explicit 302 so browser always follows redirect (e.g. after native form POST).
+      return new Response(null, { status: 302, headers: { Location: installUrl } });
+    }
+    // Shop was provided but redirect failed (e.g. SHOPIFY_API_KEY not set).
+    return { errors: { shop: "Server misconfiguration. Contact the app author." }, apiKey: API_KEY || "", shop: shopFromForm };
   }
   const result = await login(request);
   if (result instanceof Response) return result;
   const errors = loginErrorMessage(result);
-  return { errors, apiKey: API_KEY || "", shop: String(shopFromForm || "") };
+  return { errors, apiKey: API_KEY || "", shop: shopFromForm };
 };
 
 export default function Auth() {
