@@ -15,7 +15,11 @@ export const loader = async ({ request }) => {
     console.log("Sessions in DB AFTER auth:", sessions.length);
     return { apiKey: process.env.SHOPIFY_API_KEY || "" };
   } catch (e) {
-    console.log("/app auth error:", e?.message || String(e));
+    if (e instanceof Response) {
+      console.log("/app auth redirect:", e.status, e.headers.get("Location"));
+    } else {
+      console.log("/app auth error:", e?.message || String(e));
+    }
     throw e;
   }
 };
