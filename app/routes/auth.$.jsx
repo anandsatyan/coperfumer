@@ -1,15 +1,24 @@
+import { redirect } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { authenticate, login } from "../shopify.server";
+import { authenticate } from "../shopify.server";
 
 export const loader = async ({ request }) => {
   const url = new URL(request.url);
   const shop = url.searchParams.get("shop");
 
-  // If shop is in the URL (e.g. /auth?shop=store.myshopify.com), start OAuth immediately
-  // instead of redirecting to the login form. This fixes the "stuck on same page" loop.
+  // GET /auth?shop=store.myshopify.com → redirect straight to Shopify OAuth install.
+  // The library's login() throws redirect(); we do it ourselves so the redirect always runs.
   if (shop && request.method === "GET") {
-    const loginResult = await login(request);
-    if (loginResult instanceof Response) return loginResult;
+    const host = shop
+      .replace(/^https?:\/\//, "")
+      .replace(/\/$/, "")
+      .trim();
+    const shopDomain = host.includes(".") ? host : `${host}.myshopify.com`;
+    const apiKey = process.env.SHOPIFY_API_KEY;
+    if (apiKey) {
+      const installUrl = `https://${shopDomain}/admin/oauth/install?client_id=${apiKey}`;
+      throw redirect(installUrl);
+    }
   }
 
   await authenticate.admin(request);
