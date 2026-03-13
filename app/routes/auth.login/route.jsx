@@ -1,6 +1,7 @@
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { useState } from "react";
 import { Form, useActionData, useLoaderData } from "react-router";
+import { boundary } from "@shopify/shopify-app-react-router/server";
 import { login } from "../../shopify.server";
 import { loginErrorMessage } from "./error.server";
 
@@ -25,7 +26,7 @@ export default function Auth() {
   const { errors } = actionData || loaderData;
 
   return (
-    <AppProvider embedded={false}>
+    <AppProvider embedded>
       <s-page>
         <Form method="post">
           <s-section heading="Log in">
@@ -45,3 +46,11 @@ export default function Auth() {
     </AppProvider>
   );
 }
+
+export function ErrorBoundary() {
+  return boundary.error();
+}
+
+export const headers = (headersArgs) => {
+  return boundary.headers(headersArgs);
+};
