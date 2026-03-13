@@ -6,9 +6,10 @@ export const loader = async ({ request }) => {
   const url = new URL(request.url);
   const shop = url.searchParams.get("shop");
 
-  // GET /auth?shop=store.myshopify.com → redirect straight to Shopify OAuth install.
-  // The library's login() throws redirect(); we do it ourselves so the redirect always runs.
-  if (shop && request.method === "GET") {
+  // Do NOT redirect when Shopify is sending the user back to /auth/callback (OAuth code exchange).
+  const isCallback = url.pathname.endsWith("/callback");
+  // GET /auth?shop=... or /auth/login?shop=... → redirect to Shopify OAuth install.
+  if (!isCallback && shop && request.method === "GET") {
     const host = shop
       .replace(/^https?:\/\//, "")
       .replace(/\/$/, "")
