@@ -3,7 +3,7 @@
 client_id = "b9375fafb4ad1242eeab1dc678e43d26"
 name = "Coperfumer"
 application_url = "https://coperfumer-ogs3e.ondigitalocean.app"
-embedded = true
+embedded = false
 
 [build]
 automatically_update_urls_on_dev = true
