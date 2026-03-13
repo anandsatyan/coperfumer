@@ -1,6 +1,6 @@
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { useState } from "react";
-import { Form, useActionData, useLoaderData, redirect } from "react-router";
+import { useActionData, useLoaderData, redirect } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { login } from "../../shopify.server";
 import { loginErrorMessage } from "./error.server";
@@ -49,20 +49,24 @@ export default function Auth() {
   return (
     <AppProvider embedded apiKey={apiKey}>
       <s-page>
-        <Form method="post" action="/auth/login">
+        {/* Native form so submit does a full page POST; browser then follows 302 to Shopify. */}
+        <form method="post" action="/auth/login">
           <s-section heading="Log in">
-            <input type="hidden" name="shop" value={shop} />
-            <s-text-field
-              label="Shop domain"
-              details="example.myshopify.com"
+            <label htmlFor="shop-domain">Shop domain</label>
+            <input
+              id="shop-domain"
+              type="text"
+              name="shop"
               value={shop}
-              onChange={(e) => setShop(e.currentTarget.value)}
-              autocomplete="on"
-              error={errors?.shop}
-            ></s-text-field>
-            <s-button type="submit">Log in</s-button>
+              onChange={(e) => setShop(e.target.value)}
+              placeholder="example.myshopify.com"
+              autoComplete="on"
+              style={{ display: "block", marginBottom: "1rem", padding: "0.5rem", width: "100%", maxWidth: "320px" }}
+            />
+            {errors?.shop && <p style={{ color: "#c00", marginTop: 0 }}>{errors.shop}</p>}
+            <button type="submit">Log in</button>
           </s-section>
-        </Form>
+        </form>
       </s-page>
     </AppProvider>
   );
