@@ -6,27 +6,29 @@ import { login } from "../../shopify.server";
 import { loginErrorMessage } from "./error.server";
 
 export const loader = async ({ request }) => {
-  const errors = loginErrorMessage(await login(request));
+  const result = await login(request);
+  if (result instanceof Response) return result;
 
-  return { errors };
+  const errors = loginErrorMessage(result);
+  return { errors, apiKey: process.env.SHOPIFY_API_KEY || "" };
 };
 
 export const action = async ({ request }) => {
-  const errors = loginErrorMessage(await login(request));
+  const result = await login(request);
+  if (result instanceof Response) return result;
 
-  return {
-    errors,
-  };
+  const errors = loginErrorMessage(result);
+  return { errors, apiKey: process.env.SHOPIFY_API_KEY || "" };
 };
 
 export default function Auth() {
   const loaderData = useLoaderData();
   const actionData = useActionData();
   const [shop, setShop] = useState("");
-  const { errors } = actionData || loaderData;
+  const { errors, apiKey } = actionData || loaderData;
 
   return (
-    <AppProvider embedded>
+    <AppProvider embedded apiKey={apiKey}>
       <s-page>
         <Form method="post">
           <s-section heading="Log in">
