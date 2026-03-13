@@ -1,102 +1,96 @@
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
-import { useState } from "react";
-import { useActionData, useLoaderData, redirect } from "react-router";
-import { boundary } from "@shopify/shopify-app-react-router/server";
+import { useActionData, useLoaderData } from "react-router";
 import { login } from "../../shopify.server";
 import { loginErrorMessage } from "./error.server";
 
-const API_KEY = process.env.SHOPIFY_API_KEY;
-
-function buildInstallRedirect(shopRaw) {
-  if (!API_KEY || !shopRaw || typeof shopRaw !== "string") return null;
-  const host = shopRaw.replace(/^https?:\/\//, "").replace(/\/$/, "").trim();
-  const shopDomain = host.includes(".") ? host : `${host}.myshopify.com`;
-  return `https://${shopDomain}/admin/oauth/install?client_id=${API_KEY}`;
-}
-
 export const loader = async ({ request }) => {
-  const url = new URL(request.url);
-  const shop = url.searchParams.get("shop");
-  if (request.method === "GET" && shop) {
-    const installUrl = buildInstallRedirect(shop);
-    if (installUrl) throw redirect(installUrl);
-  }
   const result = await login(request);
   if (result instanceof Response) return result;
   const errors = loginErrorMessage(result);
-  return { errors, apiKey: API_KEY || "", shop: url.searchParams.get("shop") || "" };
+  const url = new URL(request.url);
+  return { errors, apiKey: process.env.SHOPIFY_API_KEY || "", shop: url.searchParams.get("shop") || "" };
 };
 
 export const action = async ({ request }) => {
-  const formData = await request.formData();
-  const shopRaw = formData.get("shop");
-  const shopFromForm = typeof shopRaw === "string" ? shopRaw.trim() : "";
-  if (shopFromForm) {
-    const installUrl = buildInstallRedirect(shopFromForm);
-    if (installUrl) {
-      // Return explicit 302 so browser always follows redirect (e.g. after native form POST).
-      return new Response(null, { status: 302, headers: { Location: installUrl } });
-    }
-    // Shop was provided but redirect failed (e.g. SHOPIFY_API_KEY not set).
-    return { errors: { shop: "Server misconfiguration. Contact the app author." }, apiKey: API_KEY || "", shop: shopFromForm };
-  }
   const result = await login(request);
   if (result instanceof Response) return result;
   const errors = loginErrorMessage(result);
-  return { errors, apiKey: API_KEY || "", shop: shopFromForm };
+  const formData = await request.formData();
+  return { errors, apiKey: process.env.SHOPIFY_API_KEY || "", shop: formData.get("shop") || "" };
 };
-
-function buildInstallUrl(shop, apiKey) {
-  if (!shop?.trim() || !apiKey) return null;
-  const host = shop.replace(/^https?:\/\//, "").replace(/\/$/, "").trim();
-  const domain = host.includes(".") ? host : `${host}.myshopify.com`;
-  return `https://${domain}/admin/oauth/install?client_id=${apiKey}`;
-}
 
 export default function Auth() {
   const loaderData = useLoaderData();
   const actionData = useActionData();
-  const { errors, apiKey, shop: shopFromUrl } = actionData || loaderData;
-  const [shop, setShop] = useState(shopFromUrl || "");
-
-  const installUrl = buildInstallUrl(shop, apiKey);
+  const { errors, apiKey, shop } = actionData || loaderData;
 
   return (
     <AppProvider embedded apiKey={apiKey}>
-      <s-page>
-        <form method="post" action="/auth/login">
-          <s-section heading="Log in">
-            <label htmlFor="shop-domain">Shop domain</label>
-            <input
-              id="shop-domain"
-              type="text"
-              name="shop"
-              value={shop}
-              onChange={(e) => setShop(e.target.value)}
-              placeholder="example.myshopify.com"
-              autoComplete="on"
-              style={{ display: "block", marginBottom: "1rem", padding: "0.5rem", width: "100%", maxWidth: "320px" }}
-            />
-            {errors?.shop && <p style={{ color: "#c00", marginTop: 0 }}>{errors.shop}</p>}
-            <button type="submit">Log in</button>
-            {installUrl && (
-              <p style={{ marginTop: "1rem" }}>
-                <a href={installUrl} target="_blank" rel="noreferrer noopener" style={{ fontSize: "0.9rem" }}>
-                  Or open install page in new tab →
-                </a>
-              </p>
-            )}
-          </s-section>
-        </form>
-      </s-page>
+      <div style={{
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        minHeight: "100vh",
+        fontFamily: "sans-serif",
+        background: "#f5f5f5"
+      }}>
+        <div style={{
+          background: "#fff",
+          padding: "40px",
+          borderRadius: "8px",
+          boxShadow: "0 2px 12px rgba(0,0,0,0.1)",
+          width: "360px"
+        }}>
+          <h2 style={{ marginBottom: "8px", color: "#6B1A2A", fontFamily: "Georgia, serif" }}>
+            Coperfumer
+          </h2>
+          <p style={{ marginBottom: "24px", color: "#888", fontSize: "14px" }}>
+            Enter your shop domain to install the app.
+          </p>
+          <form method="post">
+            <div style={{ marginBottom: "16px" }}>
+              <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", color: "#666" }}>
+                Shop domain
+              </label>
+              <input
+                type="text"
+                name="shop"
+                defaultValue={shop}
+                placeholder="your-store.myshopify.com"
+                style={{
+                  width: "100%",
+                  padding: "10px 14px",
+                  border: "1px solid #ddd",
+                  borderRadius: "6px",
+                  fontSize: "14px",
+                  boxSizing: "border-box"
+                }}
+              />
+              {errors?.shop && (
+                <p style={{ color: "#c00", fontSize: "13px", marginTop: "6px" }}>
+                  {errors.shop}
+                </p>
+              )}
+            </div>
+            <button
+              type="submit"
+              style={{
+                width: "100%",
+                padding: "12px",
+                background: "#6B1A2A",
+                color: "#fff",
+                border: "none",
+                borderRadius: "6px",
+                fontSize: "15px",
+                fontWeight: "600",
+                cursor: "pointer"
+              }}
+            >
+              Install App
+            </button>
+          </form>
+        </div>
+      </div>
     </AppProvider>
   );
 }
-
-export function ErrorBoundary() {
-  return boundary.error();
-}
-
-export const headers = (headersArgs) => {
-  return boundary.headers(headersArgs);
-};
