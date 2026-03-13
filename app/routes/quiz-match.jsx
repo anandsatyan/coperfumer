@@ -20,6 +20,18 @@ export async function action({ request }) {
       );
     }
 
+    // Authenticate app proxy first (uses URL params only); then read body
+    let proxyContext;
+    try {
+      proxyContext = await authenticate.public.appProxy(request);
+    } catch (authErr) {
+      console.error("Quiz match: app proxy auth failed", authErr?.message ?? authErr);
+      return jsonResponse(
+        { matches: [], error: "Request could not be verified. Please try again from the store page." },
+        403
+      );
+    }
+
     let body;
     try {
       body = await request.json();
@@ -30,17 +42,19 @@ export async function action({ request }) {
         400
       );
     }
-    const { scentProfile } = body || {};
+    const { scentProfile, shop: shopFromBody } = body || {};
     const profileText = typeof scentProfile === "string" ? scentProfile : (scentProfile ? String(scentProfile) : "");
 
     console.log("Quiz match called with profile:", profileText || "(empty)");
 
-    let products = [];
+    const { admin, session } = proxyContext;
+    const shopDomain =
+      session?.shop ??
+      new URL(request.url).searchParams.get("shop") ??
+      (typeof shopFromBody === "string" && shopFromBody ? shopFromBody : null);
 
+    let products = [];
     try {
-      const proxyContext = await authenticate.public.appProxy(request);
-      const { admin, session } = proxyContext;
-      const shopDomain = session?.shop ?? new URL(request.url).searchParams.get("shop");
 
       if (admin) {
         console.log("App proxy authenticated with session, using Admin API");
