@@ -13,8 +13,10 @@ export const loader = async ({ request }) => {
 
 export const action = async ({ request }) => {
   const result = await login(request);
+  console.log("Login result:", JSON.stringify(result));
   if (result instanceof Response) return result;
   const errors = loginErrorMessage(result);
+  console.log("Login errors:", JSON.stringify(errors));
   const formData = await request.formData();
   return { errors, apiKey: process.env.SHOPIFY_API_KEY || "", shop: formData.get("shop") || "" };
 };
