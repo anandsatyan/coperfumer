@@ -9,7 +9,12 @@ import prisma from "../db.server";
 
 export const loader = async ({ request }) => {
   const sessions = await prisma.session.findMany();
-  console.log("Sessions in DB BEFORE auth:", sessions.length, sessions.map(s => s.id));
+  console.log("Sessions in DB BEFORE auth:", sessions.length, sessions.map(s => ({
+    id: s.id,
+    hasToken: !!s.accessToken,
+    scope: s.scope,
+  })));
+  console.log("Configured SCOPES:", process.env.SCOPES);
   try {
     await authenticate.admin(request);
     console.log("Sessions in DB AFTER auth:", sessions.length);
