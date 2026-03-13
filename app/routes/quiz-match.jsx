@@ -38,39 +38,58 @@ export async function action({ request }) {
     let products = [];
 
     try {
-      const { admin } = await authenticate.public.appProxy(request);
-      console.log("App proxy authenticated");
+      const proxyContext = await authenticate.public.appProxy(request);
+      const { admin, session } = proxyContext;
+      const shopDomain = session?.shop ?? new URL(request.url).searchParams.get("shop");
 
-      const productsResponse = await admin.graphql(`
-        query {
-          products(first: 50) {
-            edges {
-              node {
-                title
-                descriptionHtml
-                priceRangeV2 {
-                  minVariantPrice { amount currencyCode }
-                }
-                featuredImage { url }
-                variants(first: 1) {
-                  edges { node { id } }
+      if (admin) {
+        console.log("App proxy authenticated with session, using Admin API");
+        const productsResponse = await admin.graphql(`
+          query {
+            products(first: 50) {
+              edges {
+                node {
+                  title
+                  descriptionHtml
+                  priceRangeV2 {
+                    minVariantPrice { amount currencyCode }
+                  }
+                  featuredImage { url }
+                  variants(first: 1) {
+                    edges { node { id } }
+                  }
                 }
               }
             }
           }
-        }
-      `);
-
-      const data = await productsResponse.json();
-      console.log("Products fetched:", JSON.stringify(data).slice(0, 200));
-
-      products = (data.data?.products?.edges ?? []).map(({ node }) => ({
-        title: node.title,
-        description: node.descriptionHtml?.replace(/<[^>]*>/g, "").slice(0, 300) || "",
-        price: `$${parseFloat(node.priceRangeV2?.minVariantPrice?.amount ?? 0).toFixed(2)}`,
-        image: node.featuredImage?.url || "",
-        variantId: node.variants?.edges?.[0]?.node?.id?.split("/").pop() || "",
-      }));
+        `);
+        const data = await productsResponse.json();
+        products = (data.data?.products?.edges ?? []).map(({ node }) => ({
+          title: node.title,
+          description: node.descriptionHtml?.replace(/<[^>]*>/g, "").slice(0, 300) || "",
+          price: `$${parseFloat(node.priceRangeV2?.minVariantPrice?.amount ?? 0).toFixed(2)}`,
+          image: node.featuredImage?.url || "",
+          variantId: node.variants?.edges?.[0]?.node?.id?.split("/").pop() || "",
+        }));
+      } else if (shopDomain) {
+        console.log("App proxy validated, no session – fetching products from storefront:", shopDomain);
+        const normalizedShop = shopDomain.includes(".") ? shopDomain : `${shopDomain}.myshopify.com`;
+        const productsRes = await fetch(`https://${normalizedShop}/products.json?limit=50`);
+        const productsData = await productsRes.json();
+        products = (productsData.products ?? []).map((p) => ({
+          title: p.title,
+          description: p.body_html?.replace(/<[^>]*>/g, "").slice(0, 300) || "",
+          price: `$${parseFloat(p.variants?.[0]?.price ?? 0).toFixed(2)}`,
+          image: p.images?.[0]?.src ?? "",
+          variantId: String(p.variants?.[0]?.id ?? ""),
+        }));
+      } else {
+        console.error("App proxy: no admin and no shop in request");
+        return jsonResponse(
+          { matches: [], error: "Could not identify store. Open the app in Shopify admin once, then try again." },
+          403
+        );
+      }
 
       console.log("Product count:", products.length);
     } catch (authError) {
