@@ -8,10 +8,11 @@ import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 
 export const loader = async ({ request }) => {
+  const sessions = await prisma.session.findMany();
+  console.log("Sessions in DB BEFORE auth:", sessions.length, sessions.map(s => s.id));
   try {
     await authenticate.admin(request);
-    const sessions = await prisma.session.findMany();
-    console.log("Sessions in DB at /app:", sessions.length);
+    console.log("Sessions in DB AFTER auth:", sessions.length);
     return { apiKey: process.env.SHOPIFY_API_KEY || "" };
   } catch (e) {
     console.log("/app auth error:", e?.message || String(e));
