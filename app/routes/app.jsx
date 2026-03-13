@@ -5,10 +5,18 @@ import { AppProvider as PolarisAppProvider } from "@shopify/polaris";
 import "@shopify/polaris/build/esm/styles.css";
 import enTranslations from "@shopify/polaris/locales/en.json";
 import { authenticate } from "../shopify.server";
+import prisma from "../db.server";
 
 export const loader = async ({ request }) => {
-  await authenticate.admin(request);
-  return { apiKey: process.env.SHOPIFY_API_KEY || "" };
+  try {
+    await authenticate.admin(request);
+    const sessions = await prisma.session.findMany();
+    console.log("Sessions in DB at /app:", sessions.length);
+    return { apiKey: process.env.SHOPIFY_API_KEY || "" };
+  } catch (e) {
+    console.log("/app auth error:", e?.message || String(e));
+    throw e;
+  }
 };
 
 export default function App() {
