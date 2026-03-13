@@ -26,6 +26,9 @@ export async function loader({ request }) {
     }
   }
 
+  if (shop && idToken) {
+    return redirect(`/app?${url.searchParams.toString()}`);
+  }
   return redirect("/app");
 }
 
