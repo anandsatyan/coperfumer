@@ -11,7 +11,7 @@ automatically_update_urls_on_dev = true
 [webhooks]
 api_version = "2026-01"
 
-  [[webhooks.subscriptions]]
+  [[webhooks.subscriptions]] 
   topics = [ "app/uninstalled" ]
   uri = "/webhooks/app/uninstalled"
 
